@@ -23,8 +23,24 @@ STORE_MODELS_DIR  = "store_prophet_models"               # folder with one file 
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv(DATA_PATH, parse_dates=["Date"])
-    return df
+    # Use this exact URL (with confirm=t)
+    url = "https://drive.google.com/uc?export=download&id=1NhGAkFLu8pZHhCDmU0Kqkkl4kyeusE5A&confirm=t"
+    
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp_file:
+            urllib.request.urlretrieve(url, tmp_file.name)
+            tmp_path = tmp_file.name
+        
+        df = pd.read_csv(tmp_path, parse_dates=["Date"])
+        os.unlink(tmp_path)
+        
+        st.success("Data loaded successfully from Google Drive!")
+        return df
+    
+    except Exception as e:
+        st.error(f"Failed to download file: {str(e)}")
+        st.info("Possible reasons:\n• File sharing not set to 'Anyone with the link'\n• URL is still view-only\n• Temporary Google Drive restriction")
+        st.stop()
 
 @st.cache_resource
 def load_global_model():
