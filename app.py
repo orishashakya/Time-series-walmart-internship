@@ -6,6 +6,7 @@ from prophet import Prophet
 import pickle
 import os
 import tempfile
+import urllib.request
 from datetime import datetime, timedelta
 
 # ────────────────────────────────────────────────
