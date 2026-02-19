@@ -33,7 +33,9 @@ def load_data():
             urllib.request.urlretrieve(url, tmp_file.name)
             tmp_path = tmp_file.name
         
-        df = pd.read_csv(tmp_path, parse_dates=["Date"])
+        df = pd.read_csv(tmp_path)
+        st.write("Columns in dataset:", df.columns)
+
         os.unlink(tmp_path)
         
         st.success("Data loaded successfully from Google Drive!")
