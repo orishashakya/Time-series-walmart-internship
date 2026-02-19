@@ -185,3 +185,4 @@ st.caption(
     "Demo forecasting application using Prophet. "
     "For production systems, consider retraining periodically and adding more regressors."
 )
+st.write("Extra regressors:", model.extra_regressors)
