@@ -1,203 +1,187 @@
 # app.py
 import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
-from prophet import Prophet
 import pickle
 import os
-import tempfile
-import urllib.request
-from datetime import datetime, timedelta
 
 # ────────────────────────────────────────────────
-# Config & paths
+# Config
 # ────────────────────────────────────────────────
 
 st.set_page_config(page_title="Walmart Sales Forecaster", layout="wide")
 
-DATA_PATH = r"E:\newpy\time-series-walmart\data\processed\walmart_features_imputed.csv"
-GLOBAL_MODEL_PATH = "global_prophet_model.pkl"           # you'll save these later
-STORE_MODELS_DIR  = "store_prophet_models"               # folder with one file per store
+GLOBAL_MODEL_PATH = "global_prophet_model.pkl"
+STORE_MODELS_DIR = "store_prophet_models"
 
 # ────────────────────────────────────────────────
-# Helper functions
+# Model Loaders
 # ────────────────────────────────────────────────
-
-@st.cache_data
-def load_data():
-    # Use this exact URL (with confirm=t)
-    url = "https://drive.google.com/uc?export=download&id=1gkYECSRKlUgcQD6b2jHyMa3KSpysr-qz&confirm=t"
-    
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp_file:
-            urllib.request.urlretrieve(url, tmp_file.name)
-            tmp_path = tmp_file.name
-        
-        df = pd.read_csv(tmp_path)
-        st.write("Columns in dataset:", df.columns)
-
-        os.unlink(tmp_path)
-        
-        st.success("Data loaded successfully from Google Drive!")
-        return df
-    
-    except Exception as e:
-        st.error(f"Failed to download file: {str(e)}")
-        st.info("Possible reasons:\n• File sharing not set to 'Anyone with the link'\n• URL is still view-only\n• Temporary Google Drive restriction")
-        st.stop()
 
 @st.cache_resource
 def load_global_model():
     if not os.path.exists(GLOBAL_MODEL_PATH):
-        st.error("Global model not found. Please train and save it first.")
+        st.error("Global model file not found.")
         st.stop()
-    with open(GLOBAL_MODEL_PATH, 'rb') as f:
+    with open(GLOBAL_MODEL_PATH, "rb") as f:
         return pickle.load(f)
 
 @st.cache_resource
 def load_store_model(store_id):
     path = f"{STORE_MODELS_DIR}/prophet_store_{store_id}.pkl"
     if not os.path.exists(path):
-        st.warning(f"Model for store {store_id} not found.")
         return None
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         return pickle.load(f)
 
+def get_available_stores():
+    if not os.path.exists(STORE_MODELS_DIR):
+        return []
+
+    files = os.listdir(STORE_MODELS_DIR)
+    stores = []
+
+    for f in files:
+        if f.endswith(".pkl"):
+            # expects format prophet_store_1.pkl
+            store_id = f.replace("prophet_store_", "").replace(".pkl", "")
+            stores.append(int(store_id))
+
+    return sorted(stores)
+
 # ────────────────────────────────────────────────
-# Sidebar controls
+# Sidebar
 # ────────────────────────────────────────────────
 
 st.sidebar.title("Walmart Sales Forecaster")
 
 view_mode = st.sidebar.radio(
     "Forecast Level",
-    options=["Global (all stores)", "Per Store"],
-    index=0
+    ["Global (all stores)", "Per Store"]
 )
 
 weeks_forward = st.sidebar.slider(
     "Forecast horizon (weeks)",
-    min_value=4,
-    max_value=52,
-    value=26,
-    step=4
+    4, 52, 26, 4
+)
+
+show_uncertainty = st.sidebar.checkbox(
+    "Show uncertainty bands", value=True
 )
 
 if view_mode == "Per Store":
-    df = load_data()
-    available_stores = sorted(df["Store"].unique())
+    available_stores = get_available_stores()
+
+    if not available_stores:
+        st.sidebar.error("No store models found.")
+        st.stop()
+
     selected_store = st.sidebar.selectbox(
         "Select Store",
-        options=available_stores,
-        index=0
+        available_stores
     )
 
-show_uncertainty = st.sidebar.checkbox("Show uncertainty bands", value=True)
-
 # ────────────────────────────────────────────────
-# Main content
+# Main Content
 # ────────────────────────────────────────────────
 
 st.title("Walmart Weekly Sales Forecasting")
-st.markdown("Built with **Facebook Prophet** • Data from Walmart Recruiting competition")
+st.markdown("Built with **Facebook Prophet**")
 
-# Load appropriate model
+# Load model
 if view_mode == "Global (all stores)":
     model = load_global_model()
     title_prefix = "Global"
-    agg_level = "All Stores & Departments"
 else:
     model = load_store_model(selected_store)
     if model is None:
+        st.error("Model for this store not found.")
         st.stop()
     title_prefix = f"Store {selected_store}"
-    agg_level = f"Store {selected_store}"
 
 st.subheader(f"{title_prefix} Forecast")
 
-# ─── Generate forecast ────────────────────────────────────────────────
+# ────────────────────────────────────────────────
+# Forecast Generation
+# ────────────────────────────────────────────────
 
 with st.spinner("Generating forecast..."):
-    future = model.make_future_dataframe(periods=weeks_forward, freq='W-FRI')
-    
-    # If you used extra regressors, you must supply them here too
-    # For simplicity we assume only IsHoliday was used and we ffill it
-    if hasattr(model, 'extra_regressors') and 'IsHoliday' in model.extra_regressors:
-        # This part depends on your historical data structure
-        # Simplest version: assume last known value carries forward
-        last_is_holiday = model.history['IsHoliday'].iloc[-1]
-        future['IsHoliday'] = last_is_holiday   # naive — improve later if needed
-    
+    future = model.make_future_dataframe(
+        periods=weeks_forward,
+        freq="W-FRI"
+    )
+
     forecast = model.predict(future)
 
-# ─── Plot ─────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────
+# Plot
+# ────────────────────────────────────────────────
 
 fig = go.Figure()
 
 # Historical
 fig.add_trace(go.Scatter(
-    x=model.history['ds'],
-    y=model.history['y'],
-    mode='lines',
-    name='Historical',
-    line=dict(color='royalblue')
+    x=model.history["ds"],
+    y=model.history["y"],
+    mode="lines",
+    name="Historical"
 ))
 
 # Forecast
 fig.add_trace(go.Scatter(
-    x=forecast['ds'],
-    y=forecast['yhat'],
-    mode='lines',
-    name='Forecast',
-    line=dict(color='red')
+    x=forecast["ds"],
+    y=forecast["yhat"],
+    mode="lines",
+    name="Forecast"
 ))
 
+# Uncertainty
 if show_uncertainty:
     fig.add_trace(go.Scatter(
-        x=forecast['ds'],
-        y=forecast['yhat_upper'],
-        mode='lines',
+        x=forecast["ds"],
+        y=forecast["yhat_upper"],
+        mode="lines",
         line=dict(width=0),
         showlegend=False
     ))
+
     fig.add_trace(go.Scatter(
-        x=forecast['ds'],
-        y=forecast['yhat_lower'],
-        mode='lines',
-        line=dict(width=0),
-        fill='tonexty',
-        fillcolor='rgba(255, 0, 0, 0.15)',
-        name='80% Uncertainty'
+        x=forecast["ds"],
+        y=forecast["yhat_lower"],
+        mode="lines",
+        fill="tonexty",
+        name="Uncertainty"
     ))
 
 fig.update_layout(
-    title=f"{title_prefix} Weekly Sales – {agg_level}",
     xaxis_title="Date",
     yaxis_title="Weekly Sales ($)",
     hovermode="x unified",
-    height=550,
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    height=550
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ─── Download forecast ────────────────────────────────────────────────
+# ────────────────────────────────────────────────
+# Download Forecast
+# ────────────────────────────────────────────────
 
-csv_data = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
-csv_data.columns = ['Date', 'Forecast', 'Lower_80', 'Upper_80']
-csv_data['Date'] = csv_data['Date'].dt.strftime('%Y-%m-%d')
+csv_data = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].copy()
+csv_data.columns = ["Date", "Forecast", "Lower", "Upper"]
+csv_data["Date"] = csv_data["Date"].dt.strftime("%Y-%m-%d")
 
 st.download_button(
-    label="Download forecast as CSV",
-    data=csv_data.to_csv(index=False).encode('utf-8'),
+    "Download forecast as CSV",
+    csv_data.to_csv(index=False).encode("utf-8"),
     file_name=f"{title_prefix.lower().replace(' ', '_')}_forecast.csv",
     mime="text/csv"
 )
 
-# ─── Footer / info ────────────────────────────────────────────────────
+# ────────────────────────────────────────────────
+# Footer
+# ────────────────────────────────────────────────
 
 st.markdown("---")
 st.caption(
-    "Note: This is a demonstration model. For production use, consider retraining periodically "
-    "and adding more regressors (temperature, markdowns, fuel price, etc.)."
+    "Demo forecasting application using Prophet. "
+    "For production systems, consider retraining periodically and adding more regressors."
 )
