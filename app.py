@@ -110,7 +110,14 @@ with st.spinner("Generating forecast..."):
         freq="W-FRI"
     )
 
+    try:
     forecast = model.predict(future)
+    except Exception as e:
+    st.error("Prediction failed")
+    st.write(str(e))
+    st.write("Model expects these regressors:", model.extra_regressors)
+    st.stop()
+
 
 # ────────────────────────────────────────────────
 # Plot
