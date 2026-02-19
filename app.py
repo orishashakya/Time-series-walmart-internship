@@ -111,12 +111,12 @@ with st.spinner("Generating forecast..."):
     )
 
     try:
-    forecast = model.predict(future)
+        forecast = model.predict(future)
     except Exception as e:
-    st.error("Prediction failed")
-    st.write(str(e))
-    st.write("Model expects these regressors:", model.extra_regressors)
-    st.stop()
+        st.error("Prediction failed")
+        st.write(str(e))
+        st.write("Model expects these regressors:", model.extra_regressors)
+        st.stop()
 
 
 # ────────────────────────────────────────────────
