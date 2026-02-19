@@ -110,12 +110,16 @@ with st.spinner("Generating forecast..."):
         freq="W-FRI"
     )
 
+    # Add missing regressors
+    if "IsHoliday" in model.extra_regressors:
+        last_value = model.history["IsHoliday"].iloc[-1]
+        future["IsHoliday"] = last_value
+
     try:
         forecast = model.predict(future)
     except Exception as e:
         st.error("Prediction failed")
         st.write(str(e))
-        st.write("Model expects these regressors:", model.extra_regressors)
         st.stop()
 
 
