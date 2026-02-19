@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from prophet import Prophet
 import pickle
 import os
+import tempfile
 from datetime import datetime, timedelta
 
 # ────────────────────────────────────────────────
