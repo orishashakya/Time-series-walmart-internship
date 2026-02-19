@@ -26,7 +26,7 @@ STORE_MODELS_DIR  = "store_prophet_models"               # folder with one file 
 @st.cache_data
 def load_data():
     # Use this exact URL (with confirm=t)
-    url = "https://drive.google.com/uc?export=download&id=1NhGAkFLu8pZHhCDmU0Kqkkl4kyeusE5A&confirm=t"
+    url = "https://drive.google.com/uc?export=download&id=1gkYECSRKlUgcQD6b2jHyMa3KSpysr-qz&confirm=t"
     
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp_file:
